@@ -82,7 +82,7 @@ int startup(unsigned short* port)
 }
 int main()
 {
-	unsigned short port = 6745;
+	unsigned short port = 0;
 	startup(&port);
 	printf("http服务器已经启动，正在监听 %d 端口...", port);
 
