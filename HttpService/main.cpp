@@ -54,9 +54,9 @@ int startup(unsigned short* port)
 	sever_addr.sin_port = htons(*port);	//主机字节序->网络字节序
 	sever_addr.sin_addr.s_addr = htonl(INADDR_ANY);  //所有地址都可以访问
 
-	//绑定套接字
+	//绑定套接字,将创建好的 socket 和 指定 IP + 端口绑定在一起
 	if (bind(severt_socket, (struct sockaddr*)&sever_addr, sizeof(sever_addr)) < 0)
-	{
+	{//参数 2 强制转成通用地址结构体struct sockaddr*
 		error_die("bind");
 	}
 

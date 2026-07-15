@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="HttpService/HttpService.vcxproj" />
+  <Project Path="HttpService/HttpService.vcxproj" Id="5abca1ff-a96a-462b-8775-3f664378e0ec" />
 </Solution>
