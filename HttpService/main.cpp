@@ -1,4 +1,5 @@
 ﻿#include<stdio.h>
+#include<iostream>
 #include<stdlib.h>	//exit()
 #include<string.h>	//memset()
 #include<sys/types.h>
@@ -127,18 +128,39 @@ void unimplement(int client)
 
 void not_found(int client)
 {
-
+	
 }
 
 void headers(int client)
 {
 	//发送响应包的头信息
+	char buff[1024];
 
+	strcpy(buff, "HTTP/1.0 200 OK\r\n");
+	send(client, buff, strlen(buff), 0);
+
+	strcpy(buff, "Server: HaleHttp/0.1\r\n");
+	send(client, buff, strlen(buff), 0);
+
+	strcpy(buff, "Content-type:text/html\r\n");
+	send(client, buff, strlen(buff), 0);
+
+	strcpy(buff, "\r\n");
+	send(client, buff, strlen(buff), 0);
 }
 
 void cat(int client, FILE* resource)
 {
-
+	char buff[4096];
+	int count = 0;
+	while (1)
+	{
+		int ret = fread(buff, sizeof(char), sizeof(buff), resource);
+		if (ret <= 0) break;
+		send(client, buff, ret, 0);
+		count += ret;
+	}
+	std::cout << "一共发送[" << count << "]字节给浏览器\n";
 }
 
 void server_file(int client, const char* fileName)
@@ -251,7 +273,7 @@ DWORD WINAPI accept_request(LPVOID arg)
 int main()
 {
 	setvbuf(stdout, NULL, _IONBF, 0);	//禁用 stdout 缓冲：VS 调试/管道下 stdout 可能是全缓冲，光靠 \n 不会刷新
-	unsigned short port = 0;
+	unsigned short port = 80;
 	SOCKET server_sock=startup(&port);
 	printf("http服务器已经启动，正在监听 %d 端口...\n", port);
 
