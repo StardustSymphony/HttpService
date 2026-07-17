@@ -27,7 +27,7 @@ int startup(unsigned short* port)
 		error_die("WSAStartup");
 	}
 
-	//创建套接字
+	//创建套服务器接字
 	int severt_socket=socket(AF_INET,	//使用的地址族协议，也就是ip地址的格式（ipv4/ipv6）
 		SOCK_STREAM,	//使用流式的传输协议
 		IPPROTO_TCP	//流式传输默认使用的是tcp
@@ -80,11 +80,39 @@ int startup(unsigned short* port)
 
 	return severt_socket;
 }
+
+//处理用户请求的线程函数
+DWORD WINAPI accept_request(LPVOID arg)
+{
+
+	return 0;
+}
+
 int main()
 {
 	unsigned short port = 0;
-	startup(&port);
+	int server_sock=startup(&port);
 	printf("http服务器已经启动，正在监听 %d 端口...", port);
 
+	struct sockaddr_in client_addr;
+	int client_addr_len = sizeof(client_addr);
+
+	// to do
+	while (1)	//接受客户端发来的请求
+	{
+		//阻塞式等待用户发来请求,同意的话服务器创建一个新的对应的套接字与客户端进行通信
+		int client_sock=accept(server_sock, (struct sockaddr*)&client_addr, &client_addr_len);
+
+		if (client_sock == -1)
+		{
+			error_die("accept");
+		}
+
+		//创建一个新的线程来接受其他用户发来的请求
+		DWORD threadId = 0;
+		CreateThread(0, 0, accept_request, (void*)client_sock, 0, &threadId);
+	}
+
+	closesocket(server_sock);
 	return 0;
 }
