@@ -128,7 +128,26 @@ void unimplement(int client)
 
 void not_found(int client)
 {
-	
+	//发送404响应
+	char buff[1024];
+
+	strcpy(buff, "HTTP/1.0 404 NOT FOUND\r\n");
+	send(client, buff, strlen(buff), 0);
+
+	strcpy(buff, "Server: HaleHttp/0.1\r\n");
+	send(client, buff, strlen(buff), 0);
+
+	strcpy(buff, "Content-type:text/html\n");
+	send(client, buff, strlen(buff), 0);
+
+	strcpy(buff, "\r\n");
+	send(client, buff, strlen(buff), 0);
+
+	//发送404网页响应内容
+
+
+
+	send(client, buff, strlen(buff), 0);
 }
 
 void headers(int client)
@@ -142,7 +161,7 @@ void headers(int client)
 	strcpy(buff, "Server: HaleHttp/0.1\r\n");
 	send(client, buff, strlen(buff), 0);
 
-	strcpy(buff, "Content-type:text/html\r\n");
+	strcpy(buff, "Content-type:text/html\n");
 	send(client, buff, strlen(buff), 0);
 
 	strcpy(buff, "\r\n");
@@ -175,7 +194,16 @@ void server_file(int client, const char* fileName)
 		PRINTF(buff);
 	}
 
-	FILE* resource = fopen(fileName, "r");
+	FILE* resource = NULL;
+	if (strcmp(fileName, "htdocs/index.html") == 0)
+	{
+		resource = fopen(fileName, "r");
+	}
+	else
+	{
+		resource = fopen(fileName, "rb");
+	}
+
 	if (resource == nullptr)
 	{
 		not_found(client);

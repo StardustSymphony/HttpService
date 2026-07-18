@@ -3,5 +3,6 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="CGI/CGI.vcxproj" Id="c346e6cd-ae85-42be-aa0d-2aa14fc1b9bd" />
   <Project Path="HttpService/HttpService.vcxproj" Id="5abca1ff-a96a-462b-8775-3f664378e0ec" />
 </Solution>
