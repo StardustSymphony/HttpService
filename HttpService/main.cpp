@@ -221,15 +221,7 @@ void server_file(int client, const char* fileName)
 		PRINTF(buff);
 	}
 
-	FILE* resource = NULL;
-	if (strcmp(fileName, "htdocs/index.html") == 0)
-	{
-		resource = fopen(fileName, "r");
-	}
-	else
-	{
-		resource = fopen(fileName, "rb");
-	}
+	FILE* resource = fopen(fileName, "rb");
 
 	if (resource == nullptr)
 	{
@@ -278,7 +270,7 @@ void execute_cgi(int client, const char* method, const char* url)
     const char* prog = path_part + 9;   // 跳过前缀 "/cgi-bin/"
     if (*prog == 0) prog = "index";
     char exe_path[512];
-    snprintf(exe_path, sizeof(exe_path), "cgi-bin/%s.exe", prog);
+    snprintf(exe_path, sizeof(exe_path), "cgi-bin\\%s.exe", prog);
 
     struct stat st;
     if (stat(exe_path, &st) == -1)
@@ -331,7 +323,7 @@ void execute_cgi(int client, const char* method, const char* url)
         error_die("CreatePipe");
     }
 
-    STARTUPINFO si = { 0 };
+    STARTUPINFOA si = { 0 };
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
     si.hStdInput  = hChildStdin_R;     // 子进程从管道读请求体
@@ -339,10 +331,24 @@ void execute_cgi(int client, const char* method, const char* url)
     si.hStdError  = hChildStdout_W;    // 子进程错误也写进响应
     si.wShowWindow = SW_HIDE;
 
+    // 转成绝对路径再启动：CreateProcess 对相对路径解析不稳定（曾报 error 2 找不到 exe，
+    // 尽管 stat 用同一相对路径能找到）。GetFullPathName 以服务器进程 cwd 为基准解析。
+    char abs_exe[512];
+    DWORD abs_len = GetFullPathNameA(exe_path, sizeof(abs_exe), abs_exe, NULL);
+    if (abs_len == 0 || abs_len >= sizeof(abs_exe))
+    {
+        printf("GetFullPathName failed, error: %d\n", GetLastError());
+        not_found(client);
+        CloseHandle(hChildStdout_R); CloseHandle(hChildStdout_W);
+        CloseHandle(hChildStdin_R);  CloseHandle(hChildStdin_W);
+        return;
+    }
+
     PROCESS_INFORMATION pi = { 0 };
     char cmdline[640];
-    snprintf(cmdline, sizeof(cmdline), "\"%s\"", exe_path);
-    if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    snprintf(cmdline, sizeof(cmdline), "\"%s\"", abs_exe);
+
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
         printf("CreateProcess failed, error: %d\n", GetLastError());
         not_found(client);
@@ -488,7 +494,7 @@ DWORD WINAPI accept_request(LPVOID arg)
 int main()
 {
 	setvbuf(stdout, NULL, _IONBF, 0);	//禁用 stdout 缓冲：VS 调试/管道下 stdout 可能是全缓冲，光靠 \n 不会刷新
-	unsigned short port = 80;
+	unsigned short port = 8080;	//非特权端口，普通用户（VS 默认以普通权限 F5 调试）即可 bind 成功；若需 80 端口请以管理员身份运行 VS
 	SOCKET server_sock=startup(&port);
 	printf("http服务器已经启动，正在监听 %d 端口...\n", port);
 
