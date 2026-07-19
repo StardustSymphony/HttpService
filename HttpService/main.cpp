@@ -10,13 +10,28 @@
 #include<windows.h>
 #pragma comment(lib,"WS2_32.lib")
 
+//定义一个宏函数
 #define PRINTF(str) printf("[%s-%d]"#str"=%s\n", __func__, __LINE__, buff)
 
-//打印系统调用失败的错误信息
+//打印系统调用失败的错误信息（Winsock 错误需用 WSAGetLastError 获取准确错误码）
 void error_die(const char* str)
 {
-	perror(str);
+	printf("%s failed, WSA error: %d\n", str, WSAGetLastError());
 	exit(1);
+}
+
+//循环发送，直到全部字节发出或出错（send 可能只发送部分数据，忽略返回值会截断响应）
+int send_all(int sock, const char* buf, int len)
+{
+	int sent = 0;
+	while (sent < len)
+	{
+		int n = send(sock, buf + sent, len - sent, 0);
+		if (n <= 0)
+			break;
+		sent += n;
+	}
+	return sent;
 }
 
 //网络的初始化，返回服务器端的套接字
@@ -75,7 +90,7 @@ SOCKET startup(unsigned short* port)
 			error_die("getsockname");
 		}
 
-		*port = sever_addr.sin_port;
+		*port = ntohs(sever_addr.sin_port);	//sin_port 为网络字节序，必须转回主机序才能正确打印端口
 	}
 
 	//创建监听队列
@@ -123,49 +138,63 @@ int get_line(int sock, char* buff, int size)
 
 void unimplement(int client)
 {
-
+	//向浏览器返回 501 Not Implemented（不支持的请求方法）
+	const char* resp =
+		"HTTP/1.0 501 Not Implemented\r\n"
+		"Server: HaleHttp/0.1\r\n"
+		"Content-type: text/html\r\n"
+		"\r\n"
+		"<html><head><title>501</title></head>"
+		"<body><h1>501 Not Implemented</h1>"
+		"<p>The requested method is not supported.</p></body></html>";
+	send_all(client, resp, (int)strlen(resp));
 }
 
 void not_found(int client)
 {
-	//发送404响应
-	char buff[1024];
+	//404 响应体（此前把头缓冲 "\r\n" 当 body 重复发送，这里改为发送真正的错误页）
+	static const char* body =
+		"<html><head><title>404</title></head>"
+		"<body><h1>404 Not Found</h1>"
+		"<p>The requested resource was not found.</p></body></html>";
 
-	strcpy(buff, "HTTP/1.0 404 NOT FOUND\r\n");
-	send(client, buff, strlen(buff), 0);
+	char head[1024];
+	int n = snprintf(head, sizeof(head),
+		"HTTP/1.0 404 NOT FOUND\r\n"
+		"Server: HaleHttp/0.1\r\n"
+		"Content-type: text/html\r\n"
+		"Content-Length: %zu\r\n"
+		"Connection: close\r\n"
+		"\r\n"
+		,
+		strlen(body));
 
-	strcpy(buff, "Server: HaleHttp/0.1\r\n");
-	send(client, buff, strlen(buff), 0);
-
-	strcpy(buff, "Content-type:text/html\n");
-	send(client, buff, strlen(buff), 0);
-
-	strcpy(buff, "\r\n");
-	send(client, buff, strlen(buff), 0);
-
-	//发送404网页响应内容
-
-
-
-	send(client, buff, strlen(buff), 0);
+	send_all(client, head, n);
+	send_all(client, body, (int)strlen(body));
 }
 
-void headers(int client)
+void headers(int client, long content_length)
 {
 	//发送响应包的头信息
 	char buff[1024];
 
-	strcpy(buff, "HTTP/1.0 200 OK\r\n");
-	send(client, buff, strlen(buff), 0);
+	snprintf(buff, sizeof(buff), "HTTP/1.0 200 OK\r\n");
+	send_all(client, buff, strlen(buff));
 
-	strcpy(buff, "Server: HaleHttp/0.1\r\n");
-	send(client, buff, strlen(buff), 0);
+	snprintf(buff, sizeof(buff), "Server: HaleHttp/0.1\r\n");
+	send_all(client, buff, strlen(buff));
 
-	strcpy(buff, "Content-type:text/html\n");
-	send(client, buff, strlen(buff), 0);
+	snprintf(buff, sizeof(buff), "Content-type: text/html\r\n");
+	send_all(client, buff, strlen(buff));
 
-	strcpy(buff, "\r\n");
-	send(client, buff, strlen(buff), 0);
+	snprintf(buff, sizeof(buff), "Content-Length: %ld\r\n", content_length);
+	send_all(client, buff, strlen(buff));
+
+	snprintf(buff, sizeof(buff), "Connection: close\r\n");
+	send_all(client, buff, strlen(buff));
+
+	snprintf(buff, sizeof(buff), "\r\n");
+	send_all(client, buff, strlen(buff));
 }
 
 void cat(int client, FILE* resource)
@@ -176,7 +205,7 @@ void cat(int client, FILE* resource)
 	{
 		int ret = fread(buff, sizeof(char), sizeof(buff), resource);
 		if (ret <= 0) break;
-		send(client, buff, ret, 0);
+		send_all(client, buff, ret);
 		count += ret;
 	}
 	std::cout << "一共发送[" << count << "]字节给浏览器\n";
@@ -184,13 +213,11 @@ void cat(int client, FILE* resource)
 
 void server_file(int client, const char* fileName)
 {
-	char numchars = 1;
 	char buff[1024];
 
-	//把请求数据包的剩余数据行读完
-	while (numchars > 0 && strcmp(buff, "\n"))
+	//读取剩余的请求头，直到遇到空行（先读入再判断，避免对未初始化 buff 做 strcmp）
+	while (get_line(client, buff, sizeof(buff)) > 0 && strcmp(buff, "\n") != 0)
 	{
-		numchars = get_line(client, buff, sizeof(buff));
 		PRINTF(buff);
 	}
 
@@ -207,19 +234,162 @@ void server_file(int client, const char* fileName)
 	if (resource == nullptr)
 	{
 		not_found(client);
-	}
-	else
-	{
-		//正式发送资源给浏览器
-		headers(client);
-
-		//发送请求的资源信息
-		cat(client, resource);
-
-		printf("资源发送完毕！\n");
+		return;	//打开失败：已发送404，禁止继续 fclose(nullptr)
 	}
 
-	fclose(resource);
+	//取得文件大小，用于 Content-Length 响应头
+	fseek(resource, 0, SEEK_END);
+	long size = ftell(resource);
+	fseek(resource, 0, SEEK_SET);
+
+	//正式发送资源给浏览器
+	headers(client, size);
+
+	//发送请求的资源信息
+	cat(client, resource);
+
+	printf("资源发送完毕！\n");
+
+	fclose(resource);	//仅成功打开时才会执行到此
+}
+
+//CGI 动态请求处理：把请求交给 cgi-bin/ 下的 CGI 程序，通过匿名管道转发其 stdout 作为响应体。
+//父进程管道范式（修复 C1/C2）：关闭父端写句柄以收到 EOF、读取到 EOF 即退出、初始化读取字节数、等待并关闭子进程句柄。
+void execute_cgi(int client, const char* method, const char* url)
+{
+    // 目录穿越防护：拒绝 URL 中含 ".." 的 CGI 请求
+    if (strstr(url, "..") != nullptr)
+    {
+        not_found(client);
+        return;
+    }
+
+    // 拆分 path 与 query string（"?" 之后为 QUERY_STRING）
+    char path_part[512];
+    const char* q = strchr(url, '?');
+    size_t path_len = q ? (size_t)(q - url) : strlen(url);
+    if (path_len >= sizeof(path_part)) path_len = sizeof(path_part) - 1;
+    memcpy(path_part, url, path_len);
+    path_part[path_len] = 0;
+    const char* query_string = (q && *(q + 1)) ? q + 1 : "";
+
+    // 定位 CGI 程序：约定放在 cgi-bin/ 目录下，按请求路径命名
+    // 例如请求 /cgi-bin/hello -> 启动 cgi-bin/hello.exe
+    const char* prog = path_part + 9;   // 跳过前缀 "/cgi-bin/"
+    if (*prog == 0) prog = "index";
+    char exe_path[512];
+    snprintf(exe_path, sizeof(exe_path), "cgi-bin/%s.exe", prog);
+
+    struct stat st;
+    if (stat(exe_path, &st) == -1)
+    {
+        not_found(client);
+        return;
+    }
+
+    // 读取剩余请求头，捕获 Content-Length / Content-Type，并丢弃其它头
+    char header[1024];
+    int content_length = 0;
+    char content_type[256] = "text/plain";
+    while (get_line(client, header, sizeof(header)) > 0 && strcmp(header, "\n") != 0)
+    {
+        if (_strnicmp(header, "Content-Length:", 15) == 0)
+        {
+            content_length = atoi(header + 15);
+        }
+        else if (_strnicmp(header, "Content-Type:", 13) == 0)
+        {
+            const char* p = header + 13;
+            while (*p == ' ' || *p == '\t') p++;
+            strncpy(content_type, p, sizeof(content_type) - 1);
+            content_type[sizeof(content_type) - 1] = 0;
+            size_t L = strlen(content_type);
+            while (L > 0 && (content_type[L - 1] == '\n' || content_type[L - 1] == '\r'))
+                content_type[--L] = 0;
+        }
+    }
+
+    // 设置 CGI 环境变量（通过继承的环境块传给子进程）
+    char e_method[64], e_query[1024], e_clen[64], e_ctype[256];
+    snprintf(e_method, sizeof(e_method), "REQUEST_METHOD=%s", method);
+    snprintf(e_query,  sizeof(e_query),  "QUERY_STRING=%s", query_string);
+    snprintf(e_clen,   sizeof(e_clen),   "CONTENT_LENGTH=%d", content_length);
+    snprintf(e_ctype,  sizeof(e_ctype),  "CONTENT_TYPE=%s", content_type);
+    _putenv(e_method);
+    _putenv(e_query);
+    _putenv(e_clen);
+    _putenv(e_ctype);
+    // 注意：多线程下直接修改进程环境存在竞态，教学项目可接受；生产环境应改用 CreateProcess 的自定义环境块
+
+    // 创建两条匿名管道：子进程 stdout -> 服务器读；服务器写 -> 子进程 stdin
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+    HANDLE hChildStdout_R = NULL, hChildStdout_W = NULL;
+    HANDLE hChildStdin_R  = NULL, hChildStdin_W  = NULL;
+    if (!CreatePipe(&hChildStdout_R, &hChildStdout_W, &sa, 0) ||
+        !CreatePipe(&hChildStdin_R,  &hChildStdin_W,  &sa, 0))
+    {
+        error_die("CreatePipe");
+    }
+
+    STARTUPINFO si = { 0 };
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.hStdInput  = hChildStdin_R;     // 子进程从管道读请求体
+    si.hStdOutput = hChildStdout_W;    // 子进程向管道写响应
+    si.hStdError  = hChildStdout_W;    // 子进程错误也写进响应
+    si.wShowWindow = SW_HIDE;
+
+    PROCESS_INFORMATION pi = { 0 };
+    char cmdline[640];
+    snprintf(cmdline, sizeof(cmdline), "\"%s\"", exe_path);
+    if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    {
+        printf("CreateProcess failed, error: %d\n", GetLastError());
+        not_found(client);
+        CloseHandle(hChildStdout_R); CloseHandle(hChildStdout_W);
+        CloseHandle(hChildStdin_R);  CloseHandle(hChildStdin_W);
+        return;
+    }
+
+    // 关键（修复 C1）：关闭父进程持有的子进程 stdout 写端 与 stdin 读端，
+    // 否则子进程退出后 ReadFile 永远收不到 EOF，会死循环
+    CloseHandle(hChildStdout_W);
+    CloseHandle(hChildStdin_R);
+
+    // 若是 POST，把请求体写入子进程 stdin，关闭写端后子进程读到 EOF
+    if (strcmp(method, "POST") == 0 && content_length > 0)
+    {
+        char buf[4096];
+        int remaining = content_length;
+        while (remaining > 0)
+        {
+            int to_read = remaining < (int)sizeof(buf) ? remaining : (int)sizeof(buf);
+            int n = recv(client, buf, to_read, 0);
+            if (n <= 0) break;
+            DWORD written = 0;
+            WriteFile(hChildStdin_W, buf, (DWORD)n, &written, NULL);
+            remaining -= n;
+        }
+    }
+    CloseHandle(hChildStdin_W);   // 关闭后子进程 stdin 到达 EOF
+
+    // 先给客户端发送 HTTP 状态行（CGI 程序自己会输出 Content-type 等头，这里只发状态行）
+    const char* status_line = "HTTP/1.0 200 OK\r\n";
+    send_all(client, status_line, (int)strlen(status_line));
+
+    // 读取子进程 stdout 并流式转发给客户端；读到 EOF（dwRead==0）即结束（修复 C1 死循环 / C2 未初始化）
+    char out_buf[4096];
+    DWORD dwRead = 0;
+    while (ReadFile(hChildStdout_R, out_buf, sizeof(out_buf), &dwRead, NULL) && dwRead > 0)
+    {
+        send_all(client, out_buf, (int)dwRead);
+    }
+
+    // 等待子进程结束并关闭所有句柄
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(hChildStdout_R);
 }
 
 //处理用户请求的线程函数
@@ -234,7 +404,7 @@ DWORD WINAPI accept_request(LPVOID arg)
 
 	char method[255];
 	int i = 0, j = 0;
-	while (!isspace(buff[j]) && i < sizeof(method) - 1)
+	while (!isspace((unsigned char)buff[j]) && i < sizeof(method) - 1)
 	{
 		method[i++] = buff[j++];
 	}
@@ -246,18 +416,19 @@ DWORD WINAPI accept_request(LPVOID arg)
 	{
 		//向浏览器返回一个错误提示页面
 		unimplement(client);
+		closesocket(client);	//避免该分支提前 return 导致套接字泄漏
 		return 0;
 	}
 
 	//解析资源文件路径
 	char url[255];	//存放完整的资源文件路径
 	i = 0;
-	while (isspace(buff[j]) && j < sizeof(buff))
+	while (isspace((unsigned char)buff[j]) && j < sizeof(buff))
 	{
 		j++;
 	}
 
-	while (!isspace(buff[j]) && i < sizeof(url) - 1 && j < sizeof(buff))
+	while (!isspace((unsigned char)buff[j]) && i < sizeof(url) - 1 && j < sizeof(buff))
 	{
 		url[i++] = buff[j++];
 	}
@@ -265,8 +436,25 @@ DWORD WINAPI accept_request(LPVOID arg)
 	url[i] = 0;
 	PRINTF(url);
 
+	//安全检查：拒绝包含 ".." 的路径，防止目录穿越读取 htdocs 之外的文件
+	if (strstr(url, "..") != nullptr)
+	{
+		not_found(client);
+		closesocket(client);
+		return 0;
+	}
+
+	//CGI 分支：URL 命中 /cgi-bin/ 时交给 CGI 程序动态处理
+	//（C3：让孤儿模块接入服务器；execute_cgi 内含正确的父进程管道范式，对应 C1/C2 修复）
+	if (strncmp(url, "/cgi-bin/", 9) == 0)
+	{
+		execute_cgi(client, method, url);
+		closesocket(client);
+		return 0;
+	}
+
 	char path[512] = "";
-	sprintf(path, "htdocs%s", url);
+	snprintf(path, sizeof(path), "htdocs%s", url);
 	if (path[strlen(path) - 1] == '/')
 	{
 		strcat(path, "index.html");
@@ -276,10 +464,9 @@ DWORD WINAPI accept_request(LPVOID arg)
 	struct stat status;
 	if (stat(path, &status) == -1)
 	{
-		//请求包的剩余数据读取完毕
-		while (numchars > 0 && strcmp(buff, "\n"))
+		//读取剩余的请求头，直到空行
+		while (get_line(client, buff, sizeof(buff)) > 0 && strcmp(buff, "\n") != 0)
 		{
-			numchars = get_line(client, buff, sizeof(buff));
 		}
 		not_found(client);
 	}

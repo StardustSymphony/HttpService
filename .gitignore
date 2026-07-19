@@ -430,3 +430,6 @@ FodyWeavers.xsd
 
 # Reasonix AI agent workspace files
 .reasonix/
+
+# WorkBuddy AI agent workspace files
+.workbuddy/

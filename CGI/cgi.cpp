@@ -1,56 +1,42 @@
-#include<stdio.h>
-#include<iostream>
-#include<Windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-//使用匿名管道来实现通信
+// CGI 子程序（由 HttpService 服务器通过匿名管道启动）
+// 从环境变量读取请求信息，向 stdout 输出 "响应头 + 空行 + 响应体"。
+// 说明：原 cgi.cpp 是“父进程读管道”的死循环 demo（C1 死循环 / C2 未初始化 size），
+// 现已改造为符合 CGI 规范的子程序；正确的“父进程管道范式”由服务器 execute_cgi 负责。
 int main()
 {
-	//创建匿名管道
-	HANDLE output[2];	//管道的两端
+    const char* method = getenv("REQUEST_METHOD");
+    const char* query  = getenv("QUERY_STRING");
+    const char* clen   = getenv("CONTENT_LENGTH");
 
-	//管道的属性
-	SECURITY_ATTRIBUTES la;
-	la.nLength = sizeof(la);
-	la.bInheritHandle = true;
-	la.lpSecurityDescriptor = 0;
+    // 若是 POST，从 stdin 读取请求体（长度由 CONTENT_LENGTH 给出）
+    char body[4096] = { 0 };
+    if (method && strcmp(method, "POST") == 0 && clen)
+    {
+        int n = atoi(clen);
+        if (n > 0 && n < (int)sizeof(body))
+        {
+            int got = (int)fread(body, 1, (size_t)n, stdin);
+            body[got] = '\0';
+        }
+    }
 
-	bool isCreate = CreatePipe(&output[0], &output[1], &la, 0);
-	if (isCreate == false)
-	{
-		MessageBox(0, "create cgi pipe error!", 0, 0);
-		return 1;
-	}
-
-	//创建一个子进程
-	char cmd[] = "ping www.baidu.com";
-	//子进程的启动属性
-	STARTUPINFO si = { 0 };
-	si.cb = sizeof(si);
-	si.hStdOutput = output[1];
-	si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-
-	PROCESS_INFORMATION pi = { 0 };
-
-	bool isTrue = CreateProcess(NULL, cmd, 0, 0, TRUE, 0, 0, 0, &si, &pi);
-
-	if (isTrue == false)
-	{
-		std::cout << "子进程创建失败！\n";
-	}
-
-	char buff[1024];
-	DWORD size;
-	while (1)
-	{
-		//std::cout << "请输入：";
-		//gets_s(buff, sizeof(buff));	//向数组里读取内容
-
-		//WriteFile(output[1], buff, sizeof(buff) + 1, &size, NULL); 
-		//std::cout << "已经写入了" << size << "字节\n";
-
-		ReadFile(output[0], buff, sizeof(buff), &size, NULL);
-		buff[size] = '\0';
-		std::cout << "已经读取了" << size << "字节：[" << buff << "]\n";
-	}
-	return 0;
+    // 输出 CGI 响应：先输出响应头，再输出一个空行，最后输出响应体
+    printf("Content-type: text/html; charset=utf-8\r\n");
+    printf("\r\n");
+    printf("<html><head><meta charset=\"utf-8\"><title>CGI Demo</title></head>\r\n");
+    printf("<body>\r\n");
+    printf("  <h1>Hello from CGI program</h1>\r\n");
+    printf("  <p>REQUEST_METHOD = %s</p>\r\n", method ? method : "(null)");
+    printf("  <p>QUERY_STRING = %s</p>\r\n", query ? query : "(null)");
+    if (body[0])
+    {
+        printf("  <p>POST body = %s</p>\r\n", body);
+    }
+    printf("</body></html>\r\n");
+    fflush(stdout);
+    return 0;
 }
