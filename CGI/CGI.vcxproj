@@ -85,6 +85,10 @@
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+    <PostBuildEvent>
+      <Command>if not exist "$(ProjectDir)..\HttpService\cgi-bin" mkdir "$(ProjectDir)..\HttpService\cgi-bin"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\HttpService\cgi-bin\index.exe"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -103,6 +107,10 @@
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+    <PostBuildEvent>
+      <Command>if not exist "$(ProjectDir)..\HttpService\cgi-bin" mkdir "$(ProjectDir)..\HttpService\cgi-bin"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\HttpService\cgi-bin\index.exe"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -119,6 +127,10 @@
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+    <PostBuildEvent>
+      <Command>if not exist "$(ProjectDir)..\HttpService\cgi-bin" mkdir "$(ProjectDir)..\HttpService\cgi-bin"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\HttpService\cgi-bin\index.exe"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -137,6 +149,10 @@
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
+    <PostBuildEvent>
+      <Command>if not exist "$(ProjectDir)..\HttpService\cgi-bin" mkdir "$(ProjectDir)..\HttpService\cgi-bin"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\HttpService\cgi-bin\index.exe"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="cgi.cpp" />
