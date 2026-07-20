@@ -140,6 +140,19 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="utils.cpp" />
+    <ClCompile Include="server.cpp" />
+    <ClCompile Include="http_parser.cpp" />
+    <ClCompile Include="response.cpp" />
+    <ClCompile Include="handler.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="utils.h" />
+    <ClInclude Include="server.h" />
+    <ClInclude Include="http_parser.h" />
+    <ClInclude Include="response.h" />
+    <ClInclude Include="handler.h" />
+    <ClInclude Include="thread_pool.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

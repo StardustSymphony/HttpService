@@ -18,5 +18,40 @@
     <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="utils.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="server.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="http_parser.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="response.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="handler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="utils.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="server.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="http_parser.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="response.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="handler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="thread_pool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
