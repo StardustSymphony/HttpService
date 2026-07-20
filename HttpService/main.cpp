@@ -48,7 +48,7 @@ SOCKET startup(unsigned short* port)
 		error_die("WSAStartup");
 	}
 
-	//创建套服务器接字
+	//创建服务器套接字
 	SOCKET severt_socket=socket(AF_INET,	//使用的地址族协议，也就是ip地址的格式（ipv4/ipv6）
 		SOCK_STREAM,	//使用流式的传输协议
 		IPPROTO_TCP	//流式传输默认使用的是tcp
@@ -60,7 +60,7 @@ SOCKET startup(unsigned short* port)
 		error_die("socket create failed");
 	}
 
-	//设置端口可复用
+	//设置端口可复用,避免在time_wait状态时无法使用之前的那个端口号
 	int opt = 1;
 	ret=setsockopt(severt_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
 	if (ret == -1)
@@ -198,9 +198,9 @@ void headers(int client, long content_length)
 }
 
 void cat(int client, FILE* resource)
-{
+{	//以 4KB 为块大小，循环从文件读取并发送给客户端
 	char buff[4096];
-	int count = 0;
+	int count = 0;	//发送的字节数
 	while (1)
 	{
 		int ret = fread(buff, sizeof(char), sizeof(buff), resource);
@@ -410,7 +410,7 @@ DWORD WINAPI accept_request(LPVOID arg)
 
 	char method[255];
 	int i = 0, j = 0;
-	while (!isspace((unsigned char)buff[j]) && i < sizeof(method) - 1)
+	while (!isspace((unsigned char)buff[j]) && i < sizeof(method) - 1)	//提取方法（get/post）
 	{
 		method[i++] = buff[j++];
 	}
